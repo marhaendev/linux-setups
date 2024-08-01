@@ -6,25 +6,27 @@ apt update && apt upgrade -y
 
 # Instal dependensi dasar
 echo "Menginstal dependensi dasar..."
-apt install -y software-properties-common wget curl
+apt install -y git python3-venv python3-pip
 
-# Tambahkan repository Ajenti
-echo "Menambahkan repository Ajenti..."
-wget -qO - https://ajenti.org/debian/key.asc | apt-key add -
-echo "deb http://deb.ajenti.org/debian main main" | tee /etc/apt/sources.list.d/ajenti.list
+# Clone repositori Ajenti
+echo "Meng-clone repositori Ajenti..."
+git clone https://github.com/ajenti/ajenti.git
 
-# Update daftar paket
-echo "Mengupdate daftar paket..."
-apt update
+# Masuk ke direktori Ajenti
+cd ajenti
 
-# Instal Ajenti
-echo "Menginstal Ajenti..."
-apt install -y ajenti
+# Buat dan aktifkan virtual environment
+echo "Membuat dan mengaktifkan virtual environment..."
+python3 -m venv venv
+source venv/bin/activate
 
-# Mulai dan aktifkan layanan Ajenti
-echo "Memulai layanan Ajenti..."
-systemctl enable ajenti
-systemctl start ajenti
+# Instal dependensi Python
+echo "Menginstal dependensi Python..."
+pip install -r requirements.txt
+
+# Jalankan Ajenti
+echo "Menjalankan Ajenti..."
+python3 ajenti-panel.py &
 
 # Konfirmasi instalasi
-echo "Ajenti telah diinstal dan dijalankan. Akses Ajenti di https://<YOUR_SERVER_IP>:8000"
+echo "Ajenti telah dijalankan. Akses Ajenti di https://$(hostname -I | awk '{print $1}'):8000"
