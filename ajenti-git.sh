@@ -26,9 +26,9 @@ echo "Membuat dan mengaktifkan virtual environment..."
 python3 -m venv venv
 source venv/bin/activate
 
-# Instal dependensi Python secara manual
-echo "Menginstal dependensi Python..."
-pip install Flask Flask-RESTful flask-socketio werkzeug
+# Instal dependensi Python dari requirements-rtd.txt
+echo "Menginstal dependensi Python dari requirements-rtd.txt..."
+pip install -r requirements-rtd.txt
 
 # Jalankan Ajenti
 echo "Menjalankan Ajenti..."
