@@ -7,7 +7,7 @@ apt upgrade -y
 
 # Install required dependencies
 echo "Installing required dependencies..."
-apt install -y wget curl software-properties-common
+apt install -y wget curl gnupg
 
 # Add Webmin repository
 echo "Adding Webmin repository..."
