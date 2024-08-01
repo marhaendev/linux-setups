@@ -28,7 +28,7 @@ deb-src http://deb.debian.org/debian bookworm-updates main contrib non-free non-
 
 
 ## INSTALL WEB SERVER
-Untuk mengunduh packages dasar yang diperlukan pada debian 12, Anda hanya perlu mengetikkan ini:
+Untuk instalasi web server menggunakan apache pada debian 12, Anda hanya perlu mengetikkan ini:
 ### Jika User root
 ```
 wget -O- https://github.com/marhaendev/linux-setups/blob/main/web-server.sh | bash
