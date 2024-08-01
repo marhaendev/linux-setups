@@ -47,11 +47,11 @@ systemctl status apache2
 Untuk instalasi VIRTUALMIN menggunakan apache pada debian 12, Anda hanya perlu mengetikkan ini:
 #### Jika User root
 ```
-wget -O- https://github.com/marhaendev/linux-setups/blob/main/virtualmin.sh | bash
+wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/webmin.sh | bash
 ```
 #### Jika User biasa (non root)
 ```
-wget -O- https://github.com/marhaendev/linux-setups/blob/main/virtualmin.sh | sudo bash
+wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/webmin.sh | sudo bash
 ```
 Untuk mengecek apakah sudah berhasil, Anda bisa mengetikkan perintah ini:
 ```
