@@ -55,6 +55,6 @@ wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/webmin.s
 ```
 Untuk mengecek apakah sudah berhasil, Anda bisa mengetikkan perintah ini:
 ```
-systemctl 
+systemctl status webmin
 ```
 
