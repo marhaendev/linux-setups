@@ -6,22 +6,30 @@ if [ "$(id -u)" -ne "0" ]; then
   exit 1
 fi
 
-echo "Menambahkan kunci GPG Virtualmin..."
-wget -O- https://software.virtualmin.com/gpl/scripts/virtualmin-key.asc | gpg --dearmor -o /usr/share/keyrings/virtualmin-archive-keyring.gpg
+# Mengatur hostname
+HOSTNAME="hosting.computingforgeeks.com"
+echo "Mengatur hostname menjadi $HOSTNAME..."
+hostnamectl set-hostname $HOSTNAME
 
-echo "Menambahkan repositori Virtualmin..."
-echo "deb [signed-by=/usr/share/keyrings/virtualmin-archive-keyring.gpg] http://software.virtualmin.com/gpl/debian/ virtualmin-universal main" | tee /etc/apt/sources.list.d/virtualmin.list
+# Memperbarui dan meng-upgrade sistem
+echo "Memperbarui dan meng-upgrade sistem..."
+apt update -y && apt upgrade -y
 
-echo "Memperbarui daftar paket..."
-apt update
+# URL CDN untuk skrip instalasi
+CDN_URL="https://cdn.example.com/scripts/install_virtualmin.sh"
 
-echo "Menginstal Webmin dan Virtualmin..."
-apt install -y webmin virtualmin
+# Mengunduh dan menjalankan skrip instalasi dari CDN
+echo "Mengunduh skrip instalasi Virtualmin dari CDN..."
+wget -O /tmp/install.sh $CDN_URL
 
-echo "Mengonfigurasi firewall..."
+echo "Menjalankan skrip instalasi Virtualmin..."
+chmod +x /tmp/install.sh
+/tmp/install.sh
+
+# Mengatur firewall
+echo "Mengatur firewall untuk mengizinkan akses ke Virtualmin..."
 ufw allow 10000/tcp
 
+# Menyelesaikan instalasi
 echo "Instalasi Virtualmin selesai!"
 echo "Anda dapat mengakses Virtualmin di URL berikut: https://<IP_SERVER>:10000"
-
-echo "Skrip selesai!"
