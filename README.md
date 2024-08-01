@@ -1,12 +1,13 @@
-# linux-setups
+# LINUX SETUPS
 
-## UNDUH PACKAGES DEBIAN 12
+## DEBIAN 12
+### UNDUH PACKAGES DEBIAN 12
 Untuk mengunduh packages dasar yang diperlukan pada debian 12, Anda hanya perlu mengetikkan ini:
-### Jika User root
+#### Jika User root
 ```
 wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/packages-debian-12.sh | bash
 ```
-### Jika User biasa (non root)
+#### Jika User biasa (non root)
 ```
 wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/packages-debian-12.sh | sudo bash
 ```
@@ -27,13 +28,13 @@ deb-src http://deb.debian.org/debian bookworm-updates main contrib non-free non-
 ```
 
 
-## INSTALL WEB SERVER
+### INSTALL WEB SERVER
 Untuk instalasi web server menggunakan apache pada debian 12, Anda hanya perlu mengetikkan ini:
-### Jika User root
+#### Jika User root
 ```
 wget -O- https://github.com/marhaendev/linux-setups/blob/main/web-server.sh | bash
 ```
-### Jika User biasa (non root)
+#### Jika User biasa (non root)
 ```
 wget -O- https://github.com/marhaendev/linux-setups/blob/main/web-server.sh | sudo bash
 ```
