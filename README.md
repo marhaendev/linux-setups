@@ -43,7 +43,7 @@ Untuk mengecek apakah sudah berhasil, Anda bisa mengetikkan perintah ini:
 systemctl status apache2
 ```
 
-### INSTALL VIRTUALMIN
+### INSTALL VIRTUALMIN (I SUGGEST INSTALL WEBMIN)
 Untuk instalasi VIRTUALMIN menggunakan apache pada debian 12, Anda hanya perlu mengetikkan ini:
 #### Jika User root
 ```
@@ -58,7 +58,7 @@ Untuk mengecek apakah sudah berhasil, Anda bisa mengetikkan perintah ini:
 systemctl status virtualmin
 ```
 
-### INSTALL WEBMIN
+### INSTALL WEBMIN (RECOMMENDED)
 Untuk instalasi VIRTUALMIN menggunakan apache pada debian 12, Anda hanya perlu mengetikkan ini:
 #### Jika User root
 ```
