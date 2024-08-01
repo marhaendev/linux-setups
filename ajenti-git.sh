@@ -6,22 +6,33 @@ apt update && apt upgrade -y
 
 # Instal dependensi dasar
 echo "Menginstal dependensi dasar..."
-apt install -y git python3-pip
+apt install -y git python3-venv python3-pip
+
+# Hapus direktori ajenti jika sudah ada
+if [ -d "ajenti" ]; then
+  echo "Direktori 'ajenti' sudah ada. Menghapus direktori lama..."
+  rm -rf ajenti
+fi
 
 # Clone repositori Ajenti
 echo "Meng-clone repositori Ajenti..."
 git clone https://github.com/ajenti/ajenti.git
 
 # Masuk ke direktori Ajenti
-cd ajenti
+cd ajenti || exit
 
-# Instal dependensi Python
+# Buat dan aktifkan virtual environment
+echo "Membuat dan mengaktifkan virtual environment..."
+python3 -m venv venv
+source venv/bin/activate
+
+# Instal dependensi Python secara manual
 echo "Menginstal dependensi Python..."
-pip3 install -r requirements.txt
+pip install Flask Flask-RESTful flask-socketio werkzeug
 
 # Jalankan Ajenti
 echo "Menjalankan Ajenti..."
-python3 ajenti-panel.py &
+python3 ajenti-panel/ajenti-panel.py &
 
 # Konfirmasi instalasi
 echo "Ajenti telah dijalankan. Akses Ajenti di https://$(hostname -I | awk '{print $1}'):8000"
