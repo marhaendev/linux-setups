@@ -1,23 +1,29 @@
 #!/bin/bash
 
-# Skrip untuk menginstal Virtualmin pada Debian/Ubuntu
-
-set -e
+# Memastikan skrip dijalankan sebagai root
+if [ "$(id -u)" -ne "0" ]; then
+  echo "Skrip ini harus dijalankan sebagai root" 1>&2
+  exit 1
+fi
 
 echo "Memperbarui dan meng-upgrade sistem..."
 apt update -y && apt upgrade -y
 
 echo "Menginstal dependensi dasar..."
-apt install -y wget curl gnupg python3-venv
+apt install -y wget curl gnupg
+
+echo "Menambahkan kunci GPG Virtualmin..."
+wget -O- https://software.virtualmin.com/gpl/scripts/virtualmin-key.asc | apt-key add -
 
 echo "Menambahkan repositori Virtualmin..."
-wget -O - https://software.virtualmin.com/gpl/scripts/install.sh | bash
+echo "deb http://software.virtualmin.com/gpl/debian/ virtualmin-universal main" | tee /etc/apt/sources.list.d/virtualmin.list
 
-echo "Instalasi Virtualmin selesai. Mohon ikuti petunjuk di layar untuk menyelesaikan konfigurasi."
+echo "Memperbarui daftar paket..."
+apt update -y
 
-echo "Periksa status Virtualmin dengan menggunakan perintah berikut setelah instalasi selesai:"
-echo "systemctl status webmin"
+echo "Menginstal Virtualmin..."
+apt install -y webmin virtualmin
 
-echo "Akses Virtualmin di: https://<IP_SERVER_AKSES>:10000"
+echo "Instalasi Virtualmin selesai. Anda dapat mengakses Virtualmin di URL berikut: https://<IP_SERVER>:10000"
 
-echo "Instalasi Virtualmin selesai!"
+echo "Skrip selesai!"
