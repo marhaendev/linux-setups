@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Memperbaiki masalah dpkg
+# Memperbaiki masalah dpkg (jika ada)
 echo "Memperbaiki masalah dpkg..."
-sudo dpkg --configure -a
+dpkg --configure -a
 
-# Memperbarui sistem dan menginstal git
-echo "Memperbarui sistem dan menginstal git..."
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3 python3-pip python3-venv git
+# Memperbarui sistem dan menginstal dependensi
+echo "Memperbarui sistem dan menginstal dependensi..."
+apt update && apt upgrade -y
+apt install -y python3 python3-pip python3-venv git
 
 # Meng-clone repository Holehe
 echo "Meng-clone repository Holehe..."
