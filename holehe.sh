@@ -14,24 +14,20 @@ echo "Meng-clone repository Holehe..."
 rm -rf holehe  # Menghapus direktori lama jika ada
 git clone https://github.com/megadose/holehe.git
 
-
-
 # Menginstal Holehe
 echo "Menginstal Holehe..."
-pip install .
+#pip install .
 
 # Menambahkan alias untuk Holehe (Opsional)
-echo "Menambahkan alias untuk Holehe..."
-echo "alias holehe='~/holehe/holehe-env/bin/holehe'" >> ~/.bashrc
-source ~/.bashrc
+#echo "Menambahkan alias untuk Holehe..."
+#echo "alias holehe='~/holehe/holehe-env/bin/holehe'" >> ~/.bashrc
+#source ~/.bashrc
 
 # Membuat dan mengaktifkan virtual environment
 echo "Membuat dan mengaktifkan virtual environment..."
 cd holehe || { echo "Direktori holehe tidak ditemukan!"; exit 1; }
 # python3 -m venv holehe-env
 
-
 # Menyelesaikan
-echo "Instalasi Holehe selesai. Anda dapat menjalankan Holehe dengan perintah 'holehe'."
-
-source holehe-env/bin/activate
+echo "Instalasi Holehe selesai. Anda dapat menjalankan Holehe dengan perintah 'source holehe-env/bin/activate'."
+echo "lalu cek dengan perintah 'holehe -h'."
