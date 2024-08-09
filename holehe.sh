@@ -30,6 +30,6 @@ cd holehe || { echo "Direktori holehe tidak ditemukan!"; exit 1; }
 
 # Menyelesaikan
 echo "Instalasi Holehe selesai. Anda dapat menjalankan Holehe dengan perintah: 'source holehe-env/bin/activate'."
-echo "cd holehe"
-echo "source holehe-env/bin/activate"
-echo "holehe -h"
+echo "> cd holehe"
+echo "> source holehe-env/bin/activate"
+echo "> holehe -h"
