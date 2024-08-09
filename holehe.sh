@@ -13,19 +13,14 @@ sudo apt install -y python3 python3-pip git
 echo "Meng-clone repository Holehe..."
 git clone https://github.com/megadose/holehe.git
 
-# Membuat dan mengaktifkan virtual environment
-echo "Membuat dan mengaktifkan virtual environment..."
+# Menginstal Holehe secara global
+echo "Menginstal Holehe secara global..."
 cd holehe || { echo "Direktori holehe tidak ditemukan!"; exit 1; }
-python3 -m venv holehe-env
-source holehe-env/bin/activate
-
-# Menginstal Holehe
-echo "Menginstal Holehe..."
-pip install .
+pip3 install .
 
 # Menambahkan alias untuk Holehe
 echo "Menambahkan alias untuk Holehe..."
-echo "alias holehe='$(pwd)/holehe-env/bin/holehe'" >> ~/.bashrc
+echo "alias holehe='$(which holehe)'" >> ~/.bashrc
 source ~/.bashrc
 
 # Menyelesaikan
