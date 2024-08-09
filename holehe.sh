@@ -17,7 +17,7 @@ git clone https://github.com/megadose/holehe.git
 # Membuat dan mengaktifkan virtual environment
 echo "Membuat dan mengaktifkan virtual environment..."
 cd holehe || { echo "Direktori holehe tidak ditemukan!"; exit 1; }
-python3 -m venv holehe-env
+# python3 -m venv holehe-env
 source holehe-env/bin/activate
 
 # Menginstal Holehe
