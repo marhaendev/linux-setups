@@ -29,7 +29,9 @@ source ~/.bashrc
 echo "Membuat dan mengaktifkan virtual environment..."
 cd holehe || { echo "Direktori holehe tidak ditemukan!"; exit 1; }
 # python3 -m venv holehe-env
-source holehe-env/bin/activate
+
 
 # Menyelesaikan
 echo "Instalasi Holehe selesai. Anda dapat menjalankan Holehe dengan perintah 'holehe'."
+
+source holehe-env/bin/activate
