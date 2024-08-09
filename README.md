@@ -74,3 +74,14 @@ systemctl status webmin
 ```
 
 
+### INSTALL HOLEHE (RECOMMENDED)
+Untuk instalasi HOLEHE pada debian 12, Anda hanya perlu mengetikkan ini:
+#### Jika User root
+```
+wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/holehe.sh | bash
+```
+Untuk mengecek apakah sudah berhasil, Anda bisa mengetikkan perintah ini:
+```
+holehe -h
+```
+
