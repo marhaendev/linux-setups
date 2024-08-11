@@ -29,7 +29,7 @@ cd holehe || { echo "Direktori holehe tidak ditemukan!"; exit 1; }
 # python3 -m venv holehe-env
 
 # Menyelesaikan
-echo "Instalasi Holehe selesai. Anda dapat menjalankan Holehe dengan perintah: 'source holehe-env/bin/activate'."
+echo "Instalasi Holehe selesai. Anda dapat menjalankan Holehe dengan perintah:"
 echo "> cd holehe"
 echo "> source holehe-env/bin/activate"
 echo "> holehe -h"
