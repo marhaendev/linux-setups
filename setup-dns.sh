@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pastikan skrip dijalankan sebagai root
+# Memastikan skrip dijalankan sebagai root
 if [ "$(id -u)" -ne "0" ]; then
     echo "Skrip ini harus dijalankan sebagai root." 1>&2
     exit 1
