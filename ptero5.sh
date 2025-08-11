@@ -18,6 +18,20 @@ check_dependencies() {
     done
 }
 
+# Fungsi: cek status Redis
+check_redis() {
+    if ! systemctl is-active --quiet redis-server; then
+        echo -e "${YELLOW}⚠️ Layanan redis-server tidak aktif. Mencoba memulai...${NC}"
+        systemctl restart redis-server 2>/dev/null || {
+            echo -e "${RED}❌ Gagal memulai redis-server. Periksa log dengan 'journalctl -xeu redis-server.service'.${NC}"
+            echo -e "${YELLOW}Melanjutkan instalasi tanpa Redis...${NC}"
+            return 1
+        }
+    fi
+    echo -e "${GREEN}✅ Layanan redis-server aktif.${NC}"
+    return 0
+}
+
 # Fungsi: cek IP publik VPS
 get_ip() {
     curl -s http://ipinfo.io/ip 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1"
@@ -183,6 +197,7 @@ install_ptero() {
     local nodejs="$5"
     local golang="$6"
     check_dependencies
+    check_redis || true
     DB_NAME="panel_$instance"
     DB_USER="pterouser_$instance"
     DB_PASS=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9')
@@ -205,7 +220,8 @@ install_ptero() {
     apt-get install -y nginx php8.2 php8.2-fpm php8.2-cli php8.2-gd php8.2-mysql \
                       php8.2-mbstring php8.2-bcmath php8.2-xml php8.2-curl php8.2-zip \
                       redis-server mariadb-server mariadb-client
-    systemctl enable --now nginx php8.2-fpm redis-server mariadb
+    systemctl enable nginx php8.2-fpm mariadb 2>/dev/null || true
+    systemctl enable --now redis-server 2>/dev/null || echo -e "${YELLOW}⚠️ Gagal mengaktifkan redis-server, melanjutkan instalasi...${NC}"
     mysql <<SQL
 CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASS';
@@ -342,7 +358,8 @@ SQL
     # Bersihkan cache aplikasi
     php artisan optimize:clear
     # Verifikasi layanan
-    systemctl restart nginx php8.2-fpm redis mariadb pteroq-$instance.service
+    systemctl restart nginx php8.2-fpm mariadb pteroq-$instance.service
+    systemctl restart redis-server 2>/dev/null || echo -e "${YELLOW}⚠️ Gagal restart redis-server, periksa konfigurasi Redis.${NC}"
     echo -e "${ORANGE}=== VERIFIKASI LAYANAN ===${NC}"
     systemctl status nginx --no-pager
     systemctl status php8.2-fpm --no-pager
