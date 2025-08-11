@@ -86,7 +86,7 @@ check_ports() {
                 else if (port==22) name="ssh";
                 else if (port==80) name="http";
                 else if (port==443) name="https";
-                else name=service;
+                else name="service";
                 printf "%-5s : %s\n", port, name;
             }
         }'
@@ -100,7 +100,7 @@ check_ports() {
                 else if (port==22) name="ssh";
                 else if (port==80) name="http";
                 else if (port==443) name="https";
-                else name=service;
+                else name="service";
                 printf "%-5s : %s\n", port, name;
             }
         }'
@@ -385,7 +385,7 @@ SERVICE
     # Setup lokasi
     mysql -u root <<SQL
 USE \`$DB_NAME\`;
-INSERT INTO locations (short, description, created_at, updated_at) VALUES
+INSERT INTO locations (short, \`long\`, created_at, updated_at) VALUES
 ('$location', '$([ "$location" == "SG" ] && echo "Singapore" || echo "Indonesia")', NOW(), NOW());
 SQL
     # Setup node
