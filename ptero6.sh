@@ -389,7 +389,7 @@ INSERT INTO locations (short, \`long\`, created_at, updated_at) VALUES
 ('$location', '$([ "$location" == "SG" ] && echo "Singapore" || echo "Indonesia")', NOW(), NOW());
 SQL
     # Setup node
-    NODE_ID=$(mysql -u root -N -e "USE \`$DB_NAME\`; INSERT INTO nodes (name, location_id, fqdn, scheme, memory, disk, daemon_listen, created_at, updated_at) VALUES ('Node-$instance', 1, '$IP', 'http', 1024, 10240, 25565, NOW(), NOW()); SELECT LAST_INSERT_ID();")
+    NODE_ID=$(mysql -u root -N -e "USE \`$DB_NAME\`; INSERT INTO nodes (name, location_id, fqdn, scheme, memory, disk, daemon_port, created_at, updated_at) VALUES ('Node-$instance', 1, '$IP', 'http', 1024, 10240, 25565, NOW(), NOW()); SELECT LAST_INSERT_ID();")
     # Setup eggs untuk Node.js dan/atau Golang
     if [[ "$nodejs" == "yes" ]]; then
         for version in 20 19 18 17 16 15 14 13 12 11; do
