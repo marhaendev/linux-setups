@@ -14,7 +14,7 @@ check_dependencies() {
     if ! id redis >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️ Pengguna redis tidak ditemukan. Membuat pengguna redis...${NC}"
         useradd -r -s /bin/false redis
-        groupadd redis
+        groupadd redis 2>/dev/null || true
         usermod -aG redis redis
     fi
     # Pastikan direktori Redis ada
