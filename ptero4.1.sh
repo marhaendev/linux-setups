@@ -85,30 +85,6 @@ get_port() {
     done
 }
 
-# Fungsi: minta port untuk Wings
-get_wings_ports() {
-    local instance="$1"
-    local base_http_port=8080
-    local base_sftp_port=2022
-    local index=0
-    for existing in /etc/pterodactyl-*; do
-        if [[ -d "$existing" ]]; then
-            if [[ "${existing##*/pterodactyl-}" == "$instance" ]]; then
-                break
-            fi
-            ((index++))
-        fi
-    done
-    WINGS_HTTP_PORT=$((base_http_port + index))
-    WINGS_SFTP_PORT=$((base_sftp_port + index))
-    while command -v ss >/dev/null 2>&1 && { ss -tulpn 2>/dev/null | grep -q ":$WINGS_HTTP_PORT\b" || ss -tulpn 2>/dev/null | grep -q ":$WINGS_SFTP_PORT\b"; }; do
-        ((index++))
-        WINGS_HTTP_PORT=$((base_http_port + index))
-        WINGS_SFTP_PORT=$((base_sftp_port + index))
-    done
-    echo -e "${GREEN}✅ Port Wings HTTP: $WINGS_HTTP_PORT, SFTP: $WINGS_SFTP_PORT${NC}"
-}
-
 # Fungsi: minta nama instance
 get_instance_name() {
     while true; do
@@ -158,12 +134,12 @@ uninstall_ptero() {
         read -rp "Lanjutkan? (y/N): " ans
         [[ "$ans" != "y" && "$ans" != "Y" ]] && { echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0; }
         # Hentikan semua layanan terkait
-        systemctl stop nginx php*-fpm mariadb redis-server pteroq*.service wings*.service 2>/dev/null || true
+        systemctl stop nginx php*-fpm mariadb redis-server pteroq*.service wings.service 2>/dev/null || true
         # Hapus semua file dan konfigurasi
-        rm -rf /var/www/pterodactyl* /etc/pterodactyl* /etc/nginx/sites-{available,enabled}/pterodactyl*.conf \
+        rm -rf /var/www/pterodactyl* /etc/pterodactyl /etc/nginx/sites-{available,enabled}/pterodactyl*.conf \
                /etc/mysql /var/lib/mysql /var/lib/redis /etc/redis
         # Hapus semua layanan systemd
-        rm -f /etc/systemd/system/pteroq*.service /etc/systemd/system/wings*.service
+        rm -f /etc/systemd/system/pteroq*.service /etc/systemd/system/wings.service
         systemctl daemon-reload
         # Bersihkan cron
         crontab -l 2>/dev/null | grep -v "pterodactyl-" | crontab - 2>/dev/null || true
@@ -180,21 +156,20 @@ uninstall_ptero() {
         fi
         echo -e "${GREEN}=== UNINSTALL SEMUA INSTANCE SELESAI ===${NC}"
     else
-        if [[ ! -d "/var/www/pterodactyl-$INSTANCE" && ! -d "/etc/pterodactyl-$INSTANCE" ]]; then
-            echo -e "${RED}❌ Instance $INSTANCE tidak ditemukan di /var/www/pterodactyl-$INSTANCE atau /etc/pterodactyl-$INSTANCE.${NC}"
+        if [[ ! -d "/var/www/pterodactyl-$INSTANCE" ]]; then
+            echo -e "${RED}❌ Instance $INSTANCE tidak ditemukan di /var/www/pterodactyl-$INSTANCE.${NC}"
             exit 1
         fi
-        echo -e "${RED}PERINGATAN: Ini akan menghapus instance Pterodactyl $INSTANCE, Wings terkait, dan semua file, database, serta konfigurasi terkait.${NC}"
+        echo -e "${RED}PERINGATAN: Ini akan menghapus instance Pterodactyl $INSTANCE dan semua file, database, serta konfigurasi terkait.${NC}"
         read -rp "Lanjutkan? (y/N): " ans
         [[ "$ans" != "y" && "$ans" != "Y" ]] && { echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0; }
         # Hentikan layanan terkait
-        systemctl stop pteroq-$INSTANCE.service wings-$INSTANCE.service 2>/dev/null || true
-        systemctl disable pteroq-$INSTANCE.service wings-$INSTANCE.service 2>/dev/null || true
+        systemctl stop pteroq-$INSTANCE.service 2>/dev/null || true
+        systemctl disable pteroq-$INSTANCE.service 2>/dev/null || true
         # Hapus file dan direktori
-        rm -rf /var/www/pterodactyl-$INSTANCE /etc/pterodactyl-$INSTANCE \
-               /etc/nginx/sites-{available,enabled}/pterodactyl-$INSTANCE.conf
+        rm -rf /var/www/pterodactyl-$INSTANCE /etc/nginx/sites-{available,enabled}/pterodactyl-$INSTANCE.conf
         # Hapus layanan systemd
-        rm -f /etc/systemd/system/pteroq-$INSTANCE.service /etc/systemd/system/wings-$INSTANCE.service
+        rm -f /etc/systemd/system/pteroq-$INSTANCE.service
         systemctl daemon-reload
         # Hapus database MySQL
         mysql -u root -e "DROP DATABASE IF EXISTS panel_$INSTANCE;" 2>/dev/null || true
@@ -210,11 +185,7 @@ uninstall_ptero() {
         # Bersihkan firewall untuk port instance
         if command -v ufw >/dev/null 2>&1; then
             PORT=$(grep -oP 'listen \K[0-9]+' /etc/nginx/sites-available/pterodactyl-$INSTANCE.conf 2>/dev/null || echo "")
-            WINGS_HTTP_PORT=$(grep -oP 'http_port: \K[0-9]+' /etc/pterodactyl-$INSTANCE/config.yml 2>/dev/null || echo "")
-            WINGS_SFTP_PORT=$(grep -oP 'sftp_port: \K[0-9]+' /etc/pterodactyl-$INSTANCE/config.yml 2>/dev/null || echo "")
             [[ -n "$PORT" ]] && ufw delete allow $PORT >/dev/null 2>&1
-            [[ -n "$WINGS_HTTP_PORT" ]] && ufw delete allow $WINGS_HTTP_PORT >/dev/null 2>&1
-            [[ -n "$WINGS_SFTP_PORT" ]] && ufw delete allow $WINGS_SFTP_PORT >/dev/null 2>&1
             echo -e "${GREEN}✅ Port terkait instance $INSTANCE telah dihapus dari firewall.${NC}"
         fi
         echo -e "${GREEN}=== UNINSTALL INSTANCE $INSTANCE SELESAI ===${NC}"
@@ -365,38 +336,40 @@ SERVICE
     echo -e "${YELLOW}Catatan: Port ${port} telah dibuka. Jika website tidak dapat diakses, periksa firewall cloud provider (misalnya, AWS, GCP) untuk memastikan port ${port} diizinkan.${NC}"
 }
 
-# Fungsi: install Wings untuk instance tertentu
+# Fungsi: install Wings (satu instance untuk semua panel)
 install_wings() {
-    local instance="$1"
-    local port="$2"
+    echo -e "${ORANGE}Menginstal Pterodactyl Wings...${NC}"
     check_dependencies
-    get_wings_ports "$instance"
-    echo -e "${ORANGE}Menginstal Pterodactyl Wings untuk instance $instance...${NC}"
-    mkdir -p /etc/pterodactyl-$instance
-    curl -sSL https://install.pterodactyl.io/wings.sh | bash -s -- -d /etc/pterodactyl-$instance
-    cat >/etc/systemd/system/wings-$instance.service <<SERVICE
+    if [[ -f "/usr/local/bin/wings" && -f "/etc/pterodactyl/config.yml" ]]; then
+        echo -e "${YELLOW}⚠️ Wings sudah terinstal. Melewati instalasi.${NC}"
+        return
+    fi
+    mkdir -p /etc/pterodactyl
+    curl -L -o /usr/local/bin/wings https://github.com/pterodactyl/wings/releases/download/v1.11.0/wings_linux_amd64
+    chmod +x /usr/local/bin/wings
+    cat >/etc/systemd/system/wings.service <<SERVICE
 [Unit]
-Description=Pterodactyl Wings Daemon ($instance)
+Description=Pterodactyl Wings Daemon
 After=docker.service
 [Service]
 User=root
 Group=root
 Restart=always
-ExecStart=/usr/local/bin/wings --config /etc/pterodactyl-$instance/config.yml
-WorkingDirectory=/etc/pterodactyl-$instance
+ExecStart=/usr/local/bin/wings --config /etc/pterodactyl/config.yml
+WorkingDirectory=/etc/pterodactyl
 [Install]
 WantedBy=multi-user.target
 SERVICE
     systemctl daemon-reload
-    systemctl enable --now wings-$instance.service
+    systemctl enable --now wings.service
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow $WINGS_HTTP_PORT >/dev/null 2>&1
-        ufw allow $WINGS_SFTP_PORT >/dev/null 2>&1
-        echo -e "${GREEN}✅ Port Wings $WINGS_HTTP_PORT (HTTP) dan $WINGS_SFTP_PORT (SFTP) telah dibuka di firewall.${NC}"
+        ufw allow 8080 >/dev/null 2>&1
+        ufw allow 2022 >/dev/null 2>&1
+        echo -e "${GREEN}✅ Port Wings 8080 (HTTP) dan 2022 (SFTP) telah dibuka di firewall.${NC}"
     else
-        echo -e "${YELLOW}⚠️ UFW tidak terdeteksi, pastikan port $WINGS_HTTP_PORT dan $WINGS_SFTP_PORT terbuka secara manual.${NC}"
+        echo -e "${YELLOW}⚠️ UFW tidak terdeteksi, pastikan port 8080 dan 2022 terbuka secara manual.${NC}"
     fi
-    echo -e "${GREEN}✅ Wings untuk instance $instance terinstal. Tambahkan node di panel dan masukkan token menggunakan opsi 888.${NC}"
+    echo -e "${GREEN}✅ Wings terinstal. Tambahkan node di panel dan masukkan token menggunakan opsi 888.${NC}"
 }
 
 # Fungsi: konfigurasi token Wings untuk instance tertentu
@@ -405,10 +378,6 @@ configure_wings_token() {
     read -rp "Nama instance: " INSTANCE
     if [[ -z "$INSTANCE" ]]; then
         echo -e "${RED}❌ Nama instance tidak boleh kosong.${NC}"
-        exit 1
-    fi
-    if [[ ! -d "/etc/pterodactyl-$INSTANCE" ]]; then
-        echo -e "${RED}❌ Wings untuk instance $INSTANCE tidak ditemukan di /etc/pterodactyl-$INSTANCE.${NC}"
         exit 1
     fi
     if [[ ! -d "/var/www/pterodactyl-$INSTANCE" ]]; then
@@ -423,15 +392,18 @@ configure_wings_token() {
     fi
     IP=$(get_ip)
     PORT=$(grep -oP 'listen \K[0-9]+' /etc/nginx/sites-available/pterodactyl-$INSTANCE.conf)
-    WINGS_HTTP_PORT=$(grep -oP 'http_port: \K[0-9]+' /etc/pterodactyl-$INSTANCE/config.yml 2>/dev/null || echo "8080")
-    cat >/etc/pterodactyl-$INSTANCE/config.yml <<CONFIG
+    if [[ ! -f "/etc/pterodactyl/config.yml" ]]; then
+        cat >/etc/pterodactyl/config.yml <<CONFIG
 token: $TOKEN
 panel_url: http://${IP}:${PORT}
-http_port: $WINGS_HTTP_PORT
-sftp_port: $((WINGS_HTTP_PORT + 1942))
+http_port: 8080
+sftp_port: 2022
 CONFIG
-    systemctl restart wings-$INSTANCE.service
-    echo -e "${GREEN}✅ Token untuk instance $INSTANCE telah dikonfigurasi. Wings sedang berjalan di port $WINGS_HTTP_PORT (HTTP) dan $((WINGS_HTTP_PORT + 1942)) (SFTP).${NC}"
+    else
+        echo -e "${YELLOW}⚠️ File config.yml sudah ada. Token hanya perlu disimpan di node panel. Pastikan token sesuai di panel instance $INSTANCE.${NC}"
+    fi
+    systemctl restart wings.service
+    echo -e "${GREEN}✅ Token untuk instance $INSTANCE telah dikonfigurasi. Wings sedang berjalan di port 8080 (HTTP) dan 2022 (SFTP).${NC}"
 }
 
 # Fungsi: buat pengguna baru dengan username sama dengan password
@@ -530,13 +502,13 @@ read -rp "Pilih opsi [0-6,12-13,888]: " choice
 case "$choice" in
     0) echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0 ;;
     1) uninstall_ptero ;;
-    2) get_instance_name && check_ports && get_port && install_ptero "yes" "$INSTANCE" "$PORT" && install_wings "$INSTANCE" "$PORT" ;;
-    3) get_instance_name && check_ports && get_port && install_ptero "no" "$INSTANCE" "$PORT" && install_wings "$INSTANCE" "$PORT" ;;
+    2) get_instance_name && check_ports && get_port && install_ptero "yes" "$INSTANCE" "$PORT" && install_wings ;;
+    3) get_instance_name && check_ports && get_port && install_ptero "no" "$INSTANCE" "$PORT" && install_wings ;;
     4) create_user ;;
     5) list_users ;;
     6) delete_user ;;
-    12) uninstall_ptero && get_instance_name && check_ports && get_port && install_ptero "yes" "$INSTANCE" "$PORT" && install_wings "$INSTANCE" "$PORT" ;;
-    13) uninstall_ptero && get_instance_name && check_ports && get_port && install_ptero "no" "$INSTANCE" "$PORT" && install_wings "$INSTANCE" "$PORT" ;;
+    12) uninstall_ptero && get_instance_name && check_ports && get_port && install_ptero "yes" "$INSTANCE" "$PORT" && install_wings ;;
+    13) uninstall_ptero && get_instance_name && check_ports && get_port && install_ptero "no" "$INSTANCE" "$PORT" && install_wings ;;
     888) configure_wings_token ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}"; exit 1 ;;
 esac
