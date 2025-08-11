@@ -10,6 +10,13 @@ NC='\033[0m' # No Color
 
 # Fungsi: cek dan instal dependensi dasar
 check_dependencies() {
+    # Pastikan pengguna dan grup redis ada
+    if ! id redis >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ Pengguna redis tidak ditemukan. Membuat pengguna redis...${NC}"
+        useradd -r -s /bin/false redis
+        groupadd redis
+        usermod -aG redis redis
+    fi
     # Pastikan direktori Redis ada
     if [ ! -d /var/lib/redis ]; then
         mkdir -p /var/lib/redis /var/log/redis
@@ -19,7 +26,7 @@ check_dependencies() {
     for cmd in curl netstat awk sed mysql nginx php ufw redis-cli; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             echo -e "${RED}❌ Perintah $cmd tidak ditemukan. Menginstall dependensi dasar...${NC}"
-            apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw redis-tools php8.2-redis
+            apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw redis-server redis-tools php8.2-redis
         fi
     done
     # Pastikan Redis berjalan
