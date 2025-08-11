@@ -10,12 +10,26 @@ NC='\033[0m' # No Color
 
 # Fungsi: cek dan instal dependensi dasar
 check_dependencies() {
+    # Pastikan direktori Redis ada
+    if [ ! -d /var/lib/redis ]; then
+        mkdir -p /var/lib/redis /var/log/redis
+        chown redis:redis /var/lib/redis /var/log/redis
+        chmod 755 /var/lib/redis /var/log/redis
+    fi
     for cmd in curl netstat awk sed mysql nginx php ufw redis-cli; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             echo -e "${RED}❌ Perintah $cmd tidak ditemukan. Menginstall dependensi dasar...${NC}"
             apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw redis-tools
         fi
     done
+    # Pastikan Redis berjalan
+    if ! systemctl is-active --quiet redis-server; then
+        echo -e "${RED}❌ Redis gagal berjalan. Mencoba memulai...${NC}"
+        systemctl restart redis-server.service || {
+            echo -e "${RED}❌ Gagal memulai Redis. Periksa konfigurasi di /etc/redis/redis.conf.${NC}"
+            exit 1
+        }
+    fi
 }
 
 # Fungsi: cek IP publik VPS
@@ -396,7 +410,6 @@ echo "6) Hapus pengguna tertentu untuk instance tertentu"
 echo "12) Uninstall lalu install dengan reCAPTCHA"
 echo "13) Uninstall lalu install tanpa reCAPTCHA"
 read -rp "Pilih opsi [0-6,12-13]: " choice
-
 case "$choice" in
     0) echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0 ;;
     1) uninstall_ptero ;;
