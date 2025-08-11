@@ -91,3 +91,7 @@ Untuk instalasi  PTERO(DACTYL) pada debian 12, Anda hanya perlu mengetikkan ini:
 ```
 wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/ptero.sh | bash
 ```
+
+```
+bash <(curl -sSL https://raw.githubusercontent.com/marhaendev/linux-setups/main/ptero.sh)
+```
