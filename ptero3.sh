@@ -142,12 +142,11 @@ uninstall_ptero() {
 # Fungsi: install Pterodactyl
 install_ptero() {
     local recaptcha="$1"
+    local instance="$2"
+    local port="$3"
     check_dependencies
-    get_instance_name
-    check_ports
-    get_port
-    DB_NAME="panel_$INSTANCE"
-    DB_USER="pterouser_$INSTANCE"
+    DB_NAME="panel_$instance"
+    DB_USER="pterouser_$instance"
     DB_PASS=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9')
     ADMIN_EMAIL="admin@example.com"
     ADMIN_USER="admin"
@@ -156,7 +155,7 @@ install_ptero() {
     ADMIN_PASS=$(openssl rand -base64 10 | tr -dc 'A-Za-z0-9!@#$%^&*()_+')
     TZ="Asia/Jakarta"
     IP=$(get_ip)
-    APP_URL="http://${IP}:${PORT}"
+    APP_URL="http://${IP}:${port}"
     export DEBIAN_FRONTEND=noninteractive
     timedatectl set-timezone "$TZ" 2>/dev/null || true
     apt-get update -y
@@ -173,8 +172,8 @@ CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASS';
 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
-    mkdir -p /var/www/pterodactyl-$INSTANCE
-    cd /var/www/pterodactyl-$INSTANCE
+    mkdir -p /var/www/pterodactyl-$instance
+    cd /var/www/pterodactyl-$instance
     curl -sSL -o panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
     tar -xzf panel.tar.gz && rm -f panel.tar.gz
     KEY=$(openssl rand -base64 32 | tr -d '\n')
@@ -204,14 +203,14 @@ ENV
     php composer.phar install --no-dev --optimize-autoloader
     php artisan optimize:clear
     php artisan migrate --seed --force
-    chown -R www-data:www-data /var/www/pterodactyl-$INSTANCE
+    chown -R www-data:www-data /var/www/pterodactyl-$instance
     chmod -R 775 storage bootstrap/cache
     php artisan storage:link || true
-    cat >/etc/nginx/sites-available/pterodactyl-$INSTANCE.conf <<NGINX
+    cat >/etc/nginx/sites-available/pterodactyl-$instance.conf <<NGINX
 server {
-    listen ${PORT};
+    listen ${port};
     server_name _;
-    root /var/www/pterodactyl-$INSTANCE/public;
+    root /var/www/pterodactyl-$instance/public;
     index index.php index.html;
     charset utf-8;
     location / {
@@ -228,31 +227,31 @@ server {
     }
 }
 NGINX
-    ln -sf /etc/nginx/sites-available/pterodactyl-$INSTANCE.conf /etc/nginx/sites-enabled/
+    ln -sf /etc/nginx/sites-available/pterodactyl-$instance.conf /etc/nginx/sites-enabled/
     nginx -t
     systemctl restart nginx
     # Buka port di firewall
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow ${PORT} >/dev/null 2>&1
-        echo -e "${GREEN}✅ Port ${PORT} telah dibuka di firewall.${NC}"
+        ufw allow ${port} >/dev/null 2>&1
+        echo -e "${GREEN}✅ Port ${port} telah dibuka di firewall.${NC}"
     else
-        echo -e "${YELLOW}⚠️ UFW tidak terdeteksi, pastikan port ${PORT} terbuka secara manual jika menggunakan firewall lain.${NC}"
+        echo -e "${YELLOW}⚠️ UFW tidak terdeteksi, pastikan port ${port} terbuka secara manual jika menggunakan firewall lain.${NC}"
     fi
-    ( crontab -l 2>/dev/null | grep -v "pterodactyl-$INSTANCE/artisan" ; echo "* * * * * php /var/www/pterodactyl-$INSTANCE/artisan schedule:run >> /dev/null 2>&1" ) | crontab -
-    cat >/etc/systemd/system/pteroq-$INSTANCE.service <<SERVICE
+    ( crontab -l 2>/dev/null | grep -v "pterodactyl-$instance/artisan" ; echo "* * * * * php /var/www/pterodactyl-$instance/artisan schedule:run >> /dev/null 2>&1" ) | crontab -
+    cat >/etc/systemd/system/pteroq-$instance.service <<SERVICE
 [Unit]
-Description=Pterodactyl Queue Worker ($INSTANCE)
+Description=Pterodactyl Queue Worker ($instance)
 After=redis.service
 [Service]
 User=www-data
 Group=www-data
 Restart=always
-ExecStart=/usr/bin/php /var/www/pterodactyl-$INSTANCE/artisan queue:work --sleep=3 --tries=3
+ExecStart=/usr/bin/php /var/www/pterodactyl-$instance/artisan queue:work --sleep=3 --tries=3
 [Install]
 WantedBy=multi-user.target
 SERVICE
     systemctl daemon-reload
-    systemctl enable --now pteroq-$INSTANCE.service
+    systemctl enable --now pteroq-$instance.service
     sudo -u www-data php artisan p:user:make \
         --email="$ADMIN_EMAIL" \
         --username="$ADMIN_USER" \
@@ -262,20 +261,20 @@ SERVICE
         --admin=1 \
         --no-interaction
     # Verifikasi layanan
-    systemctl restart nginx php8.2-fpm redis mariadb pteroq-$INSTANCE.service
+    systemctl restart nginx php8.2-fpm redis mariadb pteroq-$instance.service
     echo -e "${ORANGE}=== VERIFIKASI LAYANAN ===${NC}"
     systemctl status nginx --no-pager
     systemctl status php8.2-fpm --no-pager
     systemctl status redis --no-pager
     systemctl status mariadb --no-pager
-    systemctl status pteroq-$INSTANCE.service --no-pager
+    systemctl status pteroq-$instance.service --no-pager
     clear
     echo -e "${GREEN}=== INSTALLASI SELESAI ===${NC}"
     echo -e "${GREEN}Akses Panel: ${APP_URL}${NC}"
     echo -e "${GREEN}Email Admin: ${ADMIN_EMAIL}${NC}"
     echo -e "${GREEN}Username: ${ADMIN_USER}${NC}"
     echo -e "${GREEN}Password: ${ADMIN_PASS}${NC}"
-    echo -e "${YELLOW}Catatan: Port ${PORT} telah dibuka. Jika website tidak dapat diakses, periksa firewall cloud provider (misalnya, AWS, GCP) untuk memastikan port ${PORT} diizinkan.${NC}"
+    echo -e "${YELLOW}Catatan: Port ${port} telah dibuka. Jika website tidak dapat diakses, periksa firewall cloud provider (misalnya, AWS, GCP) untuk memastikan port ${port} diizinkan.${NC}"
 }
 
 # Fungsi: buat pengguna baru dengan username sama dengan password
@@ -371,12 +370,12 @@ read -rp "Pilih opsi [0-6,12-13]: " choice
 case "$choice" in
     0) echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0 ;;
     1) uninstall_ptero ;;
-    2) install_ptero "yes" ;;
-    3) install_ptero "no" ;;
+    2) get_instance_name && check_ports && get_port && install_ptero "yes" "$INSTANCE" "$PORT" ;;
+    3) get_instance_name && check_ports && get_port && install_ptero "no" "$INSTANCE" "$PORT" ;;
     4) create_user ;;
     5) list_users ;;
     6) delete_user ;;
-    12) uninstall_ptero && install_ptero "yes" ;;
-    13) uninstall_ptero && install_ptero "no" ;;
+    12) uninstall_ptero && get_instance_name && check_ports && get_port && install_ptero "yes" "$INSTANCE" "$PORT" ;;
+    13) uninstall_ptero && get_instance_name && check_ports && get_port && install_ptero "no" "$INSTANCE" "$PORT" ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}"; exit 1 ;;
 esac
