@@ -13,7 +13,7 @@ check_dependencies() {
     for cmd in curl netstat awk sed mysql nginx php ufw redis-cli; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             echo -e "${RED}❌ Perintah $cmd tidak ditemukan. Menginstall dependensi dasar...${NC}"
-            apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw redis-tools
+            apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw redis-tools php8.2-redis
         fi
     done
 }
@@ -27,6 +27,23 @@ check_redis() {
             echo -e "${YELLOW}Melanjutkan instalasi tanpa Redis...${NC}"
             return 1
         }
+    fi
+    # Periksa port Redis
+    if ss -tulpn | grep -q ":6379\b"; then
+        local new_port=6380
+        while ss -tulpn | grep -q ":$new_port\b"; do
+            ((new_port++))
+        done
+        echo -e "${YELLOW}⚠️ Port 6379 sudah digunakan. Mengubah ke port $new_port...${NC}"
+        sed -i "s/^port 6379/port $new_port/" /etc/redis/redis.conf
+        systemctl restart redis-server 2>/dev/null || {
+            echo -e "${RED}❌ Gagal restart redis-server dengan port baru.${NC}"
+            return 1
+        }
+        echo -e "${GREEN}✅ Redis diubah ke port $new_port.${NC}"
+        REDIS_PORT=$new_port
+    else
+        REDIS_PORT=6379
     fi
     echo -e "${GREEN}✅ Layanan redis-server aktif.${NC}"
     return 0
@@ -211,6 +228,7 @@ install_ptero() {
     APP_URL="http://${IP}:${port}"
     REDIS_DB=$(get_redis_db "$instance")
     SESSION_COOKIE="pterodactyl_session_$instance"
+    REDIS_PORT=${REDIS_PORT:-6379}
     export DEBIAN_FRONTEND=noninteractive
     timedatectl set-timezone "$TZ" 2>/dev/null || true
     apt-get update -y
@@ -219,7 +237,7 @@ install_ptero() {
     apt-get update -y
     apt-get install -y nginx php8.2 php8.2-fpm php8.2-cli php8.2-gd php8.2-mysql \
                       php8.2-mbstring php8.2-bcmath php8.2-xml php8.2-curl php8.2-zip \
-                      redis-server mariadb-server mariadb-client
+                      redis-server mariadb-server mariadb-client php8.2-redis
     systemctl enable nginx php8.2-fpm mariadb 2>/dev/null || true
     systemctl enable --now redis-server 2>/dev/null || echo -e "${YELLOW}⚠️ Gagal mengaktifkan redis-server, melanjutkan instalasi...${NC}"
     mysql <<SQL
@@ -249,7 +267,7 @@ SESSION_DRIVER=redis
 QUEUE_CONNECTION=redis
 REDIS_HOST=127.0.0.1
 REDIS_PASSWORD=null
-REDIS_PORT=6379
+REDIS_PORT=${REDIS_PORT}
 REDIS_DATABASE=${REDIS_DB}
 SESSION_COOKIE=${SESSION_COOKIE}
 ENV
@@ -258,7 +276,10 @@ ENV
     fi
     curl -sS https://getcomposer.org/installer | php
     export COMPOSER_ALLOW_SUPERUSER=1
-    php composer.phar install --no-dev --optimize-autoloader
+    php composer.phar install --no-dev --optimize-autoloader || {
+        echo -e "${YELLOW}⚠️ Composer install gagal, mencoba ulang...${NC}"
+        php composer.phar install --no-dev --optimize-autoloader
+    }
     php artisan optimize:clear
     php artisan migrate --seed --force
     chown -R www-data:www-data /var/www/pterodactyl-$instance
@@ -355,8 +376,9 @@ INSERT INTO servers (name, user_id, node_id, egg_id, created_at, updated_at) VAL
 ('Server-$instance', 1, $NODE_ID, (SELECT id FROM eggs WHERE name LIKE '%$([ "$nodejs" == "yes" ] && echo "Node.js v20" || echo "Golang v1.21")%' LIMIT 1), NOW(), NOW());
 SQL
     fi
-    # Bersihkan cache aplikasi
+    # Bersihkan cache aplikasi dan Redis
     php artisan optimize:clear
+    redis-cli -n ${REDIS_DB} FLUSHDB >/dev/null 2>&1 || true
     # Verifikasi layanan
     systemctl restart nginx php8.2-fpm mariadb pteroq-$instance.service
     systemctl restart redis-server 2>/dev/null || echo -e "${YELLOW}⚠️ Gagal restart redis-server, periksa konfigurasi Redis.${NC}"
@@ -389,6 +411,7 @@ create_user() {
     fi
     check_dependencies
     cd /var/www/pterodactyl-$INSTANCE
+    REDIS_DB=$(get_redis_db "$INSTANCE")
     ADMIN_PASS=$(openssl rand -base64 10 | tr -dc 'A-Za-z0-9!@#$%^&*()_+')
     ADMIN_USER="$ADMIN_PASS"
     ADMIN_EMAIL="admin@$ADMIN_PASS.com"
@@ -403,6 +426,7 @@ create_user() {
         --admin=1 \
         --no-interaction
     php artisan optimize:clear
+    redis-cli -n ${REDIS_DB} FLUSHDB >/dev/null 2>&1 || true
     echo -e "${GREEN}=== PENGGUNA BARU DIBUAT ===${NC}"
     echo -e "${GREEN}Email: ${ADMIN_EMAIL}${NC}"
     echo -e "${GREEN}Username: ${ADMIN_USER}${NC}"
@@ -451,38 +475,50 @@ delete_user() {
         exit 1
     }
     cd /var/www/pterodactyl-$INSTANCE
+    REDIS_DB=$(get_redis_db "$INSTANCE")
     php artisan optimize:clear
+    redis-cli -n ${REDIS_DB} FLUSHDB >/dev/null 2>&1 || true
     echo -e "${GREEN}✅ Pengguna dengan email/username '$identifier' telah dihapus dari instance $INSTANCE.${NC}"
 }
 
 # Menu pilihan
 echo -e "${ORANGE}=== Pterodactyl Panel Installer ===${NC}"
-echo "0) Batal / Cancel"
 echo "1) Uninstall bersih / Clean uninstall (pilih instance atau semua)"
 echo "2) Install dengan reCAPTCHA (Node.js + Golang)"
+echo "26) Install dengan reCAPTCHA (Node.js only)"
+echo "27) Install dengan reCAPTCHA (Golang only)"
 echo "3) Install tanpa reCAPTCHA (Node.js + Golang)"
+echo "36) Install tanpa reCAPTCHA (Node.js only)"
+echo "37) Install tanpa reCAPTCHA (Golang only)"
 echo "4) Buat pengguna baru (username = password, email = admin@password.com)"
 echo "5) Lihat semua pengguna untuk instance tertentu"
 echo "6) Hapus pengguna tertentu untuk instance tertentu"
 echo "12) Uninstall lalu install dengan reCAPTCHA (Node.js + Golang)"
-echo "36) Install tanpa reCAPTCHA (Node.js only)"
-echo "37) Install tanpa reCAPTCHA (Golang only)"
-echo "126) Uninstall lalu install tanpa reCAPTCHA (Node.js only)"
-echo "127) Uninstall lalu install tanpa reCAPTCHA (Golang only)"
-read -rp "Pilih opsi [0-6,12,36,37,126,127]: " choice
+echo "126) Uninstall lalu install dengan reCAPTCHA (Node.js only)"
+echo "127) Uninstall lalu install dengan reCAPTCHA (Golang only)"
+echo "13) Uninstall lalu install tanpa reCAPTCHA (Node.js + Golang)"
+echo "136) Uninstall lalu install tanpa reCAPTCHA (Node.js only)"
+echo "137) Uninstall lalu install tanpa reCAPTCHA (Golang only)"
+echo "0) Batal / Cancel"
+read -rp "Pilih opsi [0-6,12,13,26,27,36,37,126,127,136,137]: " choice
 
 case "$choice" in
     0) echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0 ;;
     1) uninstall_ptero ;;
     2) get_instance_name && check_ports && get_port && get_location && install_ptero "yes" "$INSTANCE" "$PORT" "$LOCATION" "yes" "yes" ;;
+    26) get_instance_name && check_ports && get_port && get_location && install_ptero "yes" "$INSTANCE" "$PORT" "$LOCATION" "yes" "no" ;;
+    27) get_instance_name && check_ports && get_port && get_location && install_ptero "yes" "$INSTANCE" "$PORT" "$LOCATION" "no" "yes" ;;
     3) get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "yes" "yes" ;;
+    36) get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "yes" "no" ;;
+    37) get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "no" "yes" ;;
     4) create_user ;;
     5) list_users ;;
     6) delete_user ;;
     12) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "yes" "$INSTANCE" "$PORT" "$LOCATION" "yes" "yes" ;;
-    36) get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "yes" "no" ;;
-    37) get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "no" "yes" ;;
-    126) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "yes" "no" ;;
-    127) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "no" "yes" ;;
+    126) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "yes" "$INSTANCE" "$PORT" "$LOCATION" "yes" "no" ;;
+    127) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "yes" "$INSTANCE" "$PORT" "$LOCATION" "no" "yes" ;;
+    13) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "yes" "yes" ;;
+    136) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "yes" "no" ;;
+    137) uninstall_ptero && get_instance_name && check_ports && get_port && get_location && install_ptero "no" "$INSTANCE" "$PORT" "$LOCATION" "no" "yes" ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}"; exit 1 ;;
 esac
