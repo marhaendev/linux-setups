@@ -10,17 +10,10 @@ NC='\033[0m' # No Color
 
 # Fungsi: cek dan instal dependensi dasar
 check_dependencies() {
-    # Pastikan pengguna dan grup redis ada
-    if ! id redis >/dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️ Pengguna redis tidak ditemukan. Membuat pengguna redis...${NC}"
-        useradd -r -s /bin/false redis
-        groupadd redis 2>/dev/null || true
-        usermod -aG redis redis
-    fi
     # Pastikan direktori Redis ada
     if [ ! -d /var/lib/redis ]; then
         mkdir -p /var/lib/redis /var/log/redis
-        chown redis:redis /var/lib/redis /var/log/redis
+        chown root:root /var/lib/redis /var/log/redis
         chmod 755 /var/lib/redis /var/log/redis
     fi
     for cmd in curl netstat awk sed mysql nginx php ufw redis-cli; do
@@ -45,7 +38,7 @@ check_redis() {
         echo -e "${YELLOW}⚠️ Layanan redis-server tidak aktif. Mencoba memulai...${NC}"
         # Pastikan direktori Redis ada
         mkdir -p /var/lib/redis /var/log/redis
-        chown redis:redis /var/lib/redis /var/log/redis
+        chown root:root /var/lib/redis /var/log/redis
         chmod 755 /var/lib/redis /var/log/redis
         # Hapus file lock
         rm -f /var/lib/redis/redis-server.pid
