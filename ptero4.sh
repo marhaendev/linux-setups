@@ -10,10 +10,10 @@ NC='\033[0m' # No Color
 
 # Fungsi: cek dan instal dependensi dasar
 check_dependencies() {
-    for cmd in curl netstat awk sed mysql nginx php ufw; do
+    for cmd in curl netstat awk sed mysql nginx php ufw redis-cli; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             echo -e "${RED}❌ Perintah $cmd tidak ditemukan. Menginstall dependensi dasar...${NC}"
-            apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw
+            apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw redis-tools
         fi
     done
 }
@@ -110,8 +110,14 @@ get_instance_name() {
 get_redis_db() {
     local instance="$1"
     local db=0
+    local instances=()
     for existing in /var/www/pterodactyl-*; do
-        if [[ "$existing" == "/var/www/pterodactyl-$instance" ]]; then
+        if [[ -d "$existing" ]]; then
+            instances+=("${existing##*/pterodactyl-}")
+        fi
+    done
+    for existing_instance in "${instances[@]}"; do
+        if [[ "$existing_instance" == "$instance" ]]; then
             break
         fi
         ((db++))
@@ -133,6 +139,7 @@ uninstall_ptero() {
         apt clean
         rm -rf /var/www/pterodactyl* /etc/nginx/sites-{available,enabled}/pterodactyl*.conf \
                /etc/mysql /var/lib/mysql /var/lib/redis /etc/redis
+        redis-cli FLUSHALL >/dev/null 2>&1 || true
         echo -e "${GREEN}=== UNINSTALL SEMUA INSTANCE SELESAI ===${NC}"
     else
         if [[ ! -d "/var/www/pterodactyl-$INSTANCE" ]]; then
@@ -147,6 +154,7 @@ uninstall_ptero() {
         rm -f /etc/systemd/system/pteroq-$INSTANCE.service
         rm -rf /var/www/pterodactyl-$INSTANCE /etc/nginx/sites-{available,enabled}/pterodactyl-$INSTANCE.conf
         mysql -u root -e "DROP DATABASE IF EXISTS panel_$INSTANCE;" 2>/dev/null || true
+        redis-cli -n $(get_redis_db "$INSTANCE") FLUSHDB >/dev/null 2>&1 || true
         systemctl restart nginx
         echo -e "${GREEN}=== UNINSTALL INSTANCE $INSTANCE SELESAI ===${NC}"
     fi
@@ -277,6 +285,8 @@ SERVICE
         --password="$ADMIN_PASS" \
         --admin=1 \
         --no-interaction
+    # Bersihkan cache aplikasi
+    php artisan optimize:clear
     # Verifikasi layanan
     systemctl restart nginx php8.2-fpm redis mariadb pteroq-$instance.service
     echo -e "${ORANGE}=== VERIFIKASI LAYANAN ===${NC}"
@@ -321,6 +331,7 @@ create_user() {
         --password="$ADMIN_PASS" \
         --admin=1 \
         --no-interaction
+    php artisan optimize:clear
     echo -e "${GREEN}=== PENGGUNA BARU DIBUAT ===${NC}"
     echo -e "${GREEN}Email: ${ADMIN_EMAIL}${NC}"
     echo -e "${GREEN}Username: ${ADMIN_USER}${NC}"
@@ -368,6 +379,8 @@ delete_user() {
         echo -e "${RED}❌ Gagal menghapus pengguna. Pastikan MariaDB berjalan dan pengguna ada.${NC}"
         exit 1
     }
+    cd /var/www/pterodactyl-$INSTANCE
+    php artisan optimize:clear
     echo -e "${GREEN}✅ Pengguna dengan email/username '$identifier' telah dihapus dari instance $INSTANCE.${NC}"
 }
 
