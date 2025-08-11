@@ -85,3 +85,9 @@ Untuk mengecek apakah sudah berhasil, Anda bisa mengetikkan perintah ini:
 holehe -h
 ```
 
+### INSTALL PTERO(DACTYL)
+Untuk instalasi  PTERO(DACTYL) pada debian 12, Anda hanya perlu mengetikkan ini:
+#### Jika User root
+```
+wget -O- https://raw.githubusercontent.com/marhaendev/linux-setups/main/ptero.sh | bash
+```
