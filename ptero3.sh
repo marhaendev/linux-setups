@@ -1,0 +1,382 @@
+#!/bin/bash
+set -e
+
+# Warna untuk output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+ORANGE='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Fungsi: cek dan instal dependensi dasar
+check_dependencies() {
+    for cmd in curl netstat awk sed mysql nginx php ufw; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            echo -e "${RED}❌ Perintah $cmd tidak ditemukan. Menginstall dependensi dasar...${NC}"
+            apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw
+        fi
+    done
+}
+
+# Fungsi: cek IP publik VPS
+get_ip() {
+    curl -s http://ipinfo.io/ip 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1"
+}
+
+# Fungsi: cek port yang digunakan (hilangkan duplikat)
+check_ports() {
+    echo -e "${ORANGE}Memeriksa port yang sedang digunakan...${NC}"
+    if command -v ss >/dev/null 2>&1; then
+        ss -tulpn 2>/dev/null | awk '{print $5, $1}' | sed 's/.*://' | sort -u | awk '
+        {
+            port=$1;
+            if(port~/^[0-9]+$/) {
+                service=$2;
+                if (port==21) name="ftp";
+                else if (port==22) name="ssh";
+                else if (port==80) name="http";
+                else if (port==443) name="https";
+                else name=service;
+                printf "%-5s : %s\n", port, name;
+            }
+        }'
+    else
+        netstat -tulpn 2>/dev/null | awk '/^tcp/ {print $4, $1}' | sed 's/.*://' | sort -u | awk '
+        {
+            port=$1;
+            if(port~/^[0-9]+$/) {
+                service=$2;
+                if (port==21) name="ftp";
+                else if (port==22) name="ssh";
+                else if (port==80) name="http";
+                else if (port==443) name="https";
+                else name=service;
+                printf "%-5s : %s\n", port, name;
+            }
+        }'
+    fi
+}
+
+# Fungsi: minta port dari user
+get_port() {
+    while true; do
+        read -rp "Masukkan port untuk Pterodactyl (1024–65535): " PORT
+        if [[ -z "$PORT" ]]; then
+            echo -e "${RED}❌ Port tidak boleh kosong.${NC}"
+            continue
+        fi
+        if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1024 || PORT > 65535 )); then
+            echo -e "${RED}❌ Port harus angka antara 1024–65535.${NC}"
+            continue
+        fi
+        if command -v ss >/dev/null 2>&1; then
+            if ss -tulpn 2>/dev/null | grep -q ":$PORT\b"; then
+                echo -e "${RED}❌ Port $PORT sudah digunakan.${NC}"
+                continue
+            fi
+        else
+            if netstat -tulpn 2>/dev/null | grep -q ":$PORT\b"; then
+                echo -e "${RED}❌ Port $PORT sudah digunakan.${NC}"
+                continue
+            fi
+        fi
+        echo -e "${GREEN}✅ Port $PORT tersedia.${NC}"
+        break
+    done
+}
+
+# Fungsi: minta nama instance
+get_instance_name() {
+    while true; do
+        read -rp "Masukkan nama instance (contoh: panel1, tanpa spasi atau karakter khusus): " INSTANCE
+        if [[ -z "$INSTANCE" ]]; then
+            echo -e "${RED}❌ Nama instance tidak boleh kosong.${NC}"
+            continue
+        fi
+        if [[ ! "$INSTANCE" =~ ^[a-zA-Z0-9]+$ ]]; then
+            echo -e "${RED}❌ Nama instance hanya boleh berisi huruf dan angka (tanpa spasi atau karakter khusus).${NC}"
+            continue
+        fi
+        if [[ -d "/var/www/pterodactyl-$INSTANCE" ]]; then
+            echo -e "${RED}❌ Instance dengan nama $INSTANCE sudah ada di /var/www/pterodactyl-$INSTANCE.${NC}"
+            continue
+        fi
+        echo -e "${GREEN}✅ Nama instance $INSTANCE tersedia.${NC}"
+        break
+    done
+}
+
+# Fungsi: uninstall bersih untuk instance tertentu
+uninstall_ptero() {
+    echo -e "${ORANGE}Masukkan nama instance yang akan dihapus (atau kosongkan untuk menghapus semua):${NC}"
+    read -rp "Nama instance (contoh: panel1): " INSTANCE
+    if [[ -z "$INSTANCE" ]]; then
+        echo -e "${RED}PERINGATAN: Ini akan menghapus SEMUA instance Pterodactyl, Nginx, MariaDB, Redis, PHP, dan file terkait.${NC}"
+        read -rp "Lanjutkan? (y/N): " ans
+        [[ "$ans" != "y" && "$ans" != "Y" ]] && { echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0; }
+        systemctl stop nginx php*-fpm mariadb redis-server pteroq*.service 2>/dev/null || true
+        apt purge -y nginx* mariadb-* mysql-* redis-server php* composer nodejs npm certbot 2>/dev/null || true
+        apt autoremove -y --purge
+        apt clean
+        rm -rf /var/www/pterodactyl* /etc/nginx/sites-{available,enabled}/pterodactyl*.conf \
+               /etc/mysql /var/lib/mysql /var/lib/redis /etc/redis
+        echo -e "${GREEN}=== UNINSTALL SEMUA INSTANCE SELESAI ===${NC}"
+    else
+        if [[ ! -d "/var/www/pterodactyl-$INSTANCE" ]]; then
+            echo -e "${RED}❌ Instance $INSTANCE tidak ditemukan di /var/www/pterodactyl-$INSTANCE.${NC}"
+            exit 1
+        fi
+        echo -e "${RED}PERINGATAN: Ini akan menghapus instance Pterodactyl $INSTANCE dan file terkait.${NC}"
+        read -rp "Lanjutkan? (y/N): " ans
+        [[ "$ans" != "y" && "$ans" != "Y" ]] && { echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0; }
+        systemctl stop pteroq-$INSTANCE.service 2>/dev/null || true
+        systemctl disable pteroq-$INSTANCE.service 2>/dev/null || true
+        rm -f /etc/systemd/system/pteroq-$INSTANCE.service
+        rm -rf /var/www/pterodactyl-$INSTANCE /etc/nginx/sites-{available,enabled}/pterodactyl-$INSTANCE.conf
+        mysql -u root -e "DROP DATABASE IF EXISTS panel_$INSTANCE;" 2>/dev/null || true
+        systemctl restart nginx
+        echo -e "${GREEN}=== UNINSTALL INSTANCE $INSTANCE SELESAI ===${NC}"
+    fi
+}
+
+# Fungsi: install Pterodactyl
+install_ptero() {
+    local recaptcha="$1"
+    check_dependencies
+    get_instance_name
+    check_ports
+    get_port
+    DB_NAME="panel_$INSTANCE"
+    DB_USER="pterouser_$INSTANCE"
+    DB_PASS=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9')
+    ADMIN_EMAIL="admin@example.com"
+    ADMIN_USER="admin"
+    ADMIN_FNAME="Panel"
+    ADMIN_LNAME="Admin"
+    ADMIN_PASS=$(openssl rand -base64 10 | tr -dc 'A-Za-z0-9!@#$%^&*()_+')
+    TZ="Asia/Jakarta"
+    IP=$(get_ip)
+    APP_URL="http://${IP}:${PORT}"
+    export DEBIAN_FRONTEND=noninteractive
+    timedatectl set-timezone "$TZ" 2>/dev/null || true
+    apt-get update -y
+    apt-get install -y software-properties-common curl ca-certificates gnupg unzip tar
+    add-apt-repository -y ppa:ondrej/php 2>/dev/null || true
+    apt-get update -y
+    apt-get install -y nginx php8.2 php8.2-fpm php8.2-cli php8.2-gd php8.2-mysql \
+                      php8.2-mbstring php8.2-bcmath php8.2-xml php8.2-curl php8.2-zip \
+                      redis-server mariadb-server mariadb-client
+    systemctl enable --now nginx php8.2-fpm redis-server mariadb
+    mysql <<SQL
+CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+    mkdir -p /var/www/pterodactyl-$INSTANCE
+    cd /var/www/pterodactyl-$INSTANCE
+    curl -sSL -o panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+    tar -xzf panel.tar.gz && rm -f panel.tar.gz
+    KEY=$(openssl rand -base64 32 | tr -d '\n')
+    cat > .env <<ENV
+APP_ENV=production
+APP_KEY=base64:${KEY}
+APP_URL=${APP_URL}
+APP_TIMEZONE=${TZ}
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=${DB_NAME}
+DB_USERNAME=${DB_USER}
+DB_PASSWORD=${DB_PASS}
+CACHE_DRIVER=redis
+SESSION_DRIVER=redis
+QUEUE_CONNECTION=redis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+ENV
+    if [[ "$recaptcha" == "no" ]]; then
+        echo "RECAPTCHA_ENABLED=false" >> .env
+    fi
+    curl -sS https://getcomposer.org/installer | php
+    export COMPOSER_ALLOW_SUPERUSER=1
+    php composer.phar install --no-dev --optimize-autoloader
+    php artisan optimize:clear
+    php artisan migrate --seed --force
+    chown -R www-data:www-data /var/www/pterodactyl-$INSTANCE
+    chmod -R 775 storage bootstrap/cache
+    php artisan storage:link || true
+    cat >/etc/nginx/sites-available/pterodactyl-$INSTANCE.conf <<NGINX
+server {
+    listen ${PORT};
+    server_name _;
+    root /var/www/pterodactyl-$INSTANCE/public;
+    index index.php index.html;
+    charset utf-8;
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+    location ~ \.php\$ {
+        include fastcgi_params;
+        fastcgi_index index.php;
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+    }
+    location ~ /\.ht {
+        deny all;
+    }
+}
+NGINX
+    ln -sf /etc/nginx/sites-available/pterodactyl-$INSTANCE.conf /etc/nginx/sites-enabled/
+    nginx -t
+    systemctl restart nginx
+    # Buka port di firewall
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow ${PORT} >/dev/null 2>&1
+        echo -e "${GREEN}✅ Port ${PORT} telah dibuka di firewall.${NC}"
+    else
+        echo -e "${YELLOW}⚠️ UFW tidak terdeteksi, pastikan port ${PORT} terbuka secara manual jika menggunakan firewall lain.${NC}"
+    fi
+    ( crontab -l 2>/dev/null | grep -v "pterodactyl-$INSTANCE/artisan" ; echo "* * * * * php /var/www/pterodactyl-$INSTANCE/artisan schedule:run >> /dev/null 2>&1" ) | crontab -
+    cat >/etc/systemd/system/pteroq-$INSTANCE.service <<SERVICE
+[Unit]
+Description=Pterodactyl Queue Worker ($INSTANCE)
+After=redis.service
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+ExecStart=/usr/bin/php /var/www/pterodactyl-$INSTANCE/artisan queue:work --sleep=3 --tries=3
+[Install]
+WantedBy=multi-user.target
+SERVICE
+    systemctl daemon-reload
+    systemctl enable --now pteroq-$INSTANCE.service
+    sudo -u www-data php artisan p:user:make \
+        --email="$ADMIN_EMAIL" \
+        --username="$ADMIN_USER" \
+        --name-first="$ADMIN_FNAME" \
+        --name-last="$ADMIN_LNAME" \
+        --password="$ADMIN_PASS" \
+        --admin=1 \
+        --no-interaction
+    # Verifikasi layanan
+    systemctl restart nginx php8.2-fpm redis mariadb pteroq-$INSTANCE.service
+    echo -e "${ORANGE}=== VERIFIKASI LAYANAN ===${NC}"
+    systemctl status nginx --no-pager
+    systemctl status php8.2-fpm --no-pager
+    systemctl status redis --no-pager
+    systemctl status mariadb --no-pager
+    systemctl status pteroq-$INSTANCE.service --no-pager
+    clear
+    echo -e "${GREEN}=== INSTALLASI SELESAI ===${NC}"
+    echo -e "${GREEN}Akses Panel: ${APP_URL}${NC}"
+    echo -e "${GREEN}Email Admin: ${ADMIN_EMAIL}${NC}"
+    echo -e "${GREEN}Username: ${ADMIN_USER}${NC}"
+    echo -e "${GREEN}Password: ${ADMIN_PASS}${NC}"
+    echo -e "${YELLOW}Catatan: Port ${PORT} telah dibuka. Jika website tidak dapat diakses, periksa firewall cloud provider (misalnya, AWS, GCP) untuk memastikan port ${PORT} diizinkan.${NC}"
+}
+
+# Fungsi: buat pengguna baru dengan username sama dengan password
+create_user() {
+    echo -e "${ORANGE}Masukkan nama instance (contoh: panel1):${NC}"
+    read -rp "Nama instance: " INSTANCE
+    if [[ -z "$INSTANCE" ]]; then
+        echo -e "${RED}❌ Nama instance tidak boleh kosong.${NC}"
+        exit 1
+    fi
+    if [[ ! -d "/var/www/pterodactyl-$INSTANCE" ]]; then
+        echo -e "${RED}❌ Instance $INSTANCE tidak ditemukan di /var/www/pterodactyl-$INSTANCE.${NC}"
+        exit 1
+    fi
+    check_dependencies
+    cd /var/www/pterodactyl-$INSTANCE
+    ADMIN_PASS=$(openssl rand -base64 10 | tr -dc 'A-Za-z0-9!@#$%^&*()_+')
+    ADMIN_USER="$ADMIN_PASS"
+    ADMIN_EMAIL="admin@$ADMIN_PASS.com"
+    ADMIN_FNAME="Panel"
+    ADMIN_LNAME="Admin"
+    sudo -u www-data php artisan p:user:make \
+        --email="$ADMIN_EMAIL" \
+        --username="$ADMIN_USER" \
+        --name-first="$ADMIN_FNAME" \
+        --name-last="$ADMIN_LNAME" \
+        --password="$ADMIN_PASS" \
+        --admin=1 \
+        --no-interaction
+    echo -e "${GREEN}=== PENGGUNA BARU DIBUAT ===${NC}"
+    echo -e "${GREEN}Email: ${ADMIN_EMAIL}${NC}"
+    echo -e "${GREEN}Username: ${ADMIN_USER}${NC}"
+    echo -e "${GREEN}Password: ${ADMIN_PASS}${NC}"
+}
+
+# Fungsi: lihat semua pengguna untuk instance tertentu
+list_users() {
+    echo -e "${ORANGE}Masukkan nama instance (contoh: panel1):${NC}"
+    read -rp "Nama instance: " INSTANCE
+    if [[ -z "$INSTANCE" ]]; then
+        echo -e "${RED}❌ Nama instance tidak boleh kosong.${NC}"
+        exit 1
+    fi
+    if [[ ! -d "/var/www/pterodactyl-$INSTANCE" ]]; then
+        echo -e "${RED}❌ Instance $INSTANCE tidak ditemukan di /var/www/pterodactyl-$INSTANCE.${NC}"
+        exit 1
+    fi
+    check_dependencies
+    mysql -u root -e "USE panel_$INSTANCE; SELECT username, email, password FROM users;" 2>/dev/null || {
+        echo -e "${RED}❌ Gagal mengakses database. Pastikan MariaDB berjalan dan database 'panel_$INSTANCE' ada.${NC}"
+        exit 1
+    }
+}
+
+# Fungsi: hapus pengguna tertentu untuk instance tertentu
+delete_user() {
+    echo -e "${ORANGE}Masukkan nama instance (contoh: panel1):${NC}"
+    read -rp "Nama instance: " INSTANCE
+    if [[ -z "$INSTANCE" ]]; then
+        echo -e "${RED}❌ Nama instance tidak boleh kosong.${NC}"
+        exit 1
+    fi
+    if [[ ! -d "/var/www/pterodactyl-$INSTANCE" ]]; then
+        echo -e "${RED}❌ Instance $INSTANCE tidak ditemukan di /var/www/pterodactyl-$INSTANCE.${NC}"
+        exit 1
+    fi
+    echo -e "${ORANGE}Masukkan email atau username pengguna yang ingin dihapus:${NC}"
+    read -rp "Email/Username: " identifier
+    if [[ -z "$identifier" ]]; then
+        echo -e "${RED}❌ Email atau username tidak boleh kosong.${NC}"
+        exit 1
+    fi
+    mysql -u root -e "USE panel_$INSTANCE; DELETE FROM users WHERE email='$identifier' OR username='$identifier';" 2>/dev/null || {
+        echo -e "${RED}❌ Gagal menghapus pengguna. Pastikan MariaDB berjalan dan pengguna ada.${NC}"
+        exit 1
+    }
+    echo -e "${GREEN}✅ Pengguna dengan email/username '$identifier' telah dihapus dari instance $INSTANCE.${NC}"
+}
+
+# Menu pilihan
+echo -e "${ORANGE}=== Pterodactyl Panel Installer ===${NC}"
+echo "0) Batal / Cancel"
+echo "1) Uninstall bersih / Clean uninstall (pilih instance atau semua)"
+echo "2) Install dengan reCAPTCHA"
+echo "3) Install tanpa reCAPTCHA"
+echo "4) Buat pengguna baru (username = password, email = admin@password.com)"
+echo "5) Lihat semua pengguna untuk instance tertentu"
+echo "6) Hapus pengguna tertentu untuk instance tertentu"
+echo "12) Uninstall lalu install dengan reCAPTCHA"
+echo "13) Uninstall lalu install tanpa reCAPTCHA"
+read -rp "Pilih opsi [0-6,12-13]: " choice
+
+case "$choice" in
+    0) echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0 ;;
+    1) uninstall_ptero ;;
+    2) install_ptero "yes" ;;
+    3) install_ptero "no" ;;
+    4) create_user ;;
+    5) list_users ;;
+    6) delete_user ;;
+    12) uninstall_ptero && install_ptero "yes" ;;
+    13) uninstall_ptero && install_ptero "no" ;;
+    *) echo -e "${RED}Pilihan tidak valid.${NC}"; exit 1 ;;
+esac
