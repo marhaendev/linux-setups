@@ -385,7 +385,7 @@ SERVICE
     # Setup lokasi
     mysql -u root <<SQL
 USE \`$DB_NAME\`;
-INSERT INTO locations (short, long_name, created_at, updated_at) VALUES
+INSERT INTO locations (short, description, created_at, updated_at) VALUES
 ('$location', '$([ "$location" == "SG" ] && echo "Singapore" || echo "Indonesia")', NOW(), NOW());
 SQL
     # Setup node
@@ -397,7 +397,7 @@ SQL
 USE \`$DB_NAME\`;
 INSERT INTO eggs (name, description, docker_image, startup, created_at, updated_at) VALUES
 ('Node.js v$version', 'Node.js version $version', 'node:$version', 'node {{SERVER_STARTUP}}', NOW(), NOW());
-INSERT INTO egg_nest (egg_id, nest_id) VALUES (LAST_INSERT_ID(), 1);
+INSERT INTO egg_nest (egg_id, nest_id) SELECT id, 1 FROM eggs WHERE name='Node.js v$version';
 SQL
         done
     fi
@@ -407,7 +407,7 @@ SQL
 USE \`$DB_NAME\`;
 INSERT INTO eggs (name, description, docker_image, startup, created_at, updated_at) VALUES
 ('Golang v$version', 'Golang version $version', 'golang:$version', 'go run {{SERVER_STARTUP}}', NOW(), NOW());
-INSERT INTO egg_nest (egg_id, nest_id) VALUES (LAST_INSERT_ID(), 1);
+INSERT INTO egg_nest (egg_id, nest_id) SELECT id, 1 FROM eggs WHERE name='Golang v$version';
 SQL
         done
     fi
