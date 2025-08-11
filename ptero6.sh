@@ -385,7 +385,7 @@ SERVICE
     # Setup lokasi
     mysql -u root <<SQL
 USE \`$DB_NAME\`;
-INSERT INTO locations (short, long, created_at, updated_at) VALUES
+INSERT INTO locations (short, long_name, created_at, updated_at) VALUES
 ('$location', '$([ "$location" == "SG" ] && echo "Singapore" || echo "Indonesia")', NOW(), NOW());
 SQL
     # Setup node
