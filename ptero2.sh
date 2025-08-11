@@ -1,11 +1,18 @@
 #!/bin/bash
 set -e
 
+# Warna untuk output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+ORANGE='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
 # Fungsi: cek dan instal dependensi dasar
 check_dependencies() {
     for cmd in curl netstat awk sed mysql nginx php ufw; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
-            echo "❌ Perintah $cmd tidak ditemukan. Menginstall dependensi dasar..."
+            echo -e "${RED}❌ Perintah $cmd tidak ditemukan. Menginstall dependensi dasar...${NC}"
             apt-get update -y && apt-get install -y curl net-tools gawk sed mariadb-client nginx php8.2-cli ufw
         fi
     done
@@ -18,7 +25,7 @@ get_ip() {
 
 # Fungsi: cek port yang digunakan (hilangkan duplikat)
 check_ports() {
-    echo "Memeriksa port yang sedang digunakan..."
+    echo -e "${ORANGE}Memeriksa port yang sedang digunakan...${NC}"
     if command -v ss >/dev/null 2>&1; then
         ss -tulpn 2>/dev/null | awk '{print $5, $1}' | sed 's/.*://' | sort -u | awk '
         {
@@ -55,51 +62,48 @@ get_port() {
     while true; do
         read -rp "Masukkan port untuk Pterodactyl (1024–65535): " PORT
         if [[ -z "$PORT" ]]; then
-            echo "❌ Port tidak boleh kosong."
+            echo -e "${RED}❌ Port tidak boleh kosong.${NC}"
             continue
         fi
         if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1024 || PORT > 65535 )); then
-            echo "❌ Port harus angka antara 1024–65535."
+            echo -e "${RED}❌ Port harus angka antara 1024–65535.${NC}"
             continue
         fi
         if command -v ss >/dev/null 2>&1; then
             if ss -tulpn 2>/dev/null | grep -q ":$PORT\b"; then
-                echo "❌ Port $PORT sudah digunakan."
+                echo -e "${RED}❌ Port $PORT sudah digunakan.${NC}"
                 continue
             fi
         else
             if netstat -tulpn 2>/dev/null | grep -q ":$PORT\b"; then
-                echo "❌ Port $PORT sudah digunakan."
+                echo -e "${RED}❌ Port $PORT sudah digunakan.${NC}"
                 continue
             fi
         fi
-        echo "✅ Port $PORT tersedia."
+        echo -e "${GREEN}✅ Port $PORT tersedia.${NC}"
         break
     done
 }
 
 # Fungsi: uninstall bersih
 uninstall_ptero() {
-    echo "=== UNINSTALL BERSIH ==="
-    echo "PERINGATAN: Ini akan menghapus Nginx, MariaDB, Redis, PHP, dan file Pterodactyl."
+    echo -e "${ORANGE}=== UNINSTALL BERSIH ===${NC}"
+    echo -e "${RED}PERINGATAN: Ini akan menghapus Nginx, MariaDB, Redis, PHP, dan file Pterodactyl.${NC}"
     read -rp "Lanjutkan? (y/N): " ans
-    [[ "$ans" != "y" && "$ans" != "Y" ]] && { echo "Dibatalkan."; exit 0; }
+    [[ "$ans" != "y" && "$ans" != "Y" ]] && { echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0; }
     systemctl stop nginx php*-fpm mariadb redis-server pteroq.service 2>/dev/null || true
     apt purge -y nginx* mariadb-* mysql-* redis-server php* composer nodejs npm certbot 2>/dev/null || true
     apt autoremove -y --purge
     apt clean
     rm -rf /var/www/pterodactyl /etc/nginx/sites-{available,enabled}/pterodactyl.conf \
            /etc/mysql /var/lib/mysql /var/lib/redis /etc/redis
-    echo "=== UNINSTALL SELESAI ==="
+    echo -e "${GREEN}=== UNINSTALL SELESAI ===${NC}"
 }
 
 # Fungsi: install Pterodactyl
 install_ptero() {
     local recaptcha="$1"
     check_dependencies
-    IP=$(get_ip)
-    check_ports
-    get_port
     DB_NAME="panel"
     DB_USER="pterouser"
     DB_PASS=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9')
@@ -109,6 +113,9 @@ install_ptero() {
     ADMIN_LNAME="Admin"
     ADMIN_PASS=$(openssl rand -base64 10 | tr -dc 'A-Za-z0-9!@#$%^&*()_+')
     TZ="Asia/Jakarta"
+    IP=$(get_ip)
+    check_ports
+    get_port
     APP_URL="http://${IP}:${PORT}"
     export DEBIAN_FRONTEND=noninteractive
     timedatectl set-timezone "$TZ" 2>/dev/null || true
@@ -187,9 +194,9 @@ NGINX
     # Buka port di firewall
     if command -v ufw >/dev/null 2>&1; then
         ufw allow ${PORT} >/dev/null 2>&1
-        echo "✅ Port ${PORT} telah dibuka di firewall."
+        echo -e "${GREEN}✅ Port ${PORT} telah dibuka di firewall.${NC}"
     else
-        echo "⚠️ UFW tidak terdeteksi, pastikan port ${PORT} terbuka secara manual jika menggunakan firewall lain."
+        echo -e "${YELLOW}⚠️ UFW tidak terdeteksi, pastikan port ${PORT} terbuka secara manual jika menggunakan firewall lain.${NC}"
     fi
     ( crontab -l 2>/dev/null | grep -v 'pterodactyl/artisan' ; echo "* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1" ) | crontab -
     cat >/etc/systemd/system/pteroq.service <<SERVICE
@@ -216,18 +223,19 @@ SERVICE
         --no-interaction
     # Verifikasi layanan
     systemctl restart nginx php8.2-fpm redis mariadb pteroq.service
-    echo "=== VERIFIKASI LAYANAN ==="
+    echo -e "${ORANGE}=== VERIFIKASI LAYANAN ===${NC}"
     systemctl status nginx --no-pager
     systemctl status php8.2-fpm --no-pager
     systemctl status redis --no-pager
     systemctl status mariadb --no-pager
     systemctl status pteroq.service --no-pager
-    echo "=== INSTALLASI SELESAI ==="
-    echo "Akses Panel: ${APP_URL}"
-    echo "Email Admin: ${ADMIN_EMAIL}"
-    echo "Username: ${ADMIN_USER}"
-    echo "Password: ${ADMIN_PASS}"
-    echo "Catatan: Port ${PORT} telah dibuka. Jika website tidak dapat diakses, periksa firewall cloud provider (misalnya, AWS, GCP) untuk memastikan port ${PORT} diizinkan."
+    clear
+    echo -e "${GREEN}=== INSTALLASI SELESAI ===${NC}"
+    echo -e "${GREEN}Akses Panel: ${APP_URL}${NC}"
+    echo -e "${GREEN}Email Admin: ${ADMIN_EMAIL}${NC}"
+    echo -e "${GREEN}Username: ${ADMIN_USER}${NC}"
+    echo -e "${GREEN}Password: ${ADMIN_PASS}${NC}"
+    echo -e "${YELLOW}Catatan: Port ${PORT} telah dibuka. Jika website tidak dapat diakses, periksa firewall cloud provider (misalnya, AWS, GCP) untuk memastikan port ${PORT} diizinkan.${NC}"
 }
 
 # Fungsi: buat pengguna baru dengan username sama dengan password
@@ -247,17 +255,17 @@ create_user() {
         --password="$ADMIN_PASS" \
         --admin=1 \
         --no-interaction
-    echo "=== PENGGUNA BARU DIBUAT ==="
-    echo "Email: ${ADMIN_EMAIL}"
-    echo "Username: ${ADMIN_USER}"
-    echo "Password: ${ADMIN_PASS}"
+    echo -e "${GREEN}=== PENGGUNA BARU DIBUAT ===${NC}"
+    echo -e "${GREEN}Email: ${ADMIN_EMAIL}${NC}"
+    echo -e "${GREEN}Username: ${ADMIN_USER}${NC}"
+    echo -e "${GREEN}Password: ${ADMIN_PASS}${NC}"
 }
 
 # Fungsi: lihat semua pengguna
 list_users() {
     check_dependencies
     mysql -u root -e "USE panel; SELECT username, email, password FROM users;" 2>/dev/null || {
-        echo "❌ Gagal mengakses database. Pastikan MariaDB berjalan dan database 'panel' ada."
+        echo -e "${RED}❌ Gagal mengakses database. Pastikan MariaDB berjalan dan database 'panel' ada.${NC}"
         exit 1
     }
 }
@@ -265,21 +273,21 @@ list_users() {
 # Fungsi: hapus pengguna tertentu
 delete_user() {
     check_dependencies
-    echo "Masukkan email atau username pengguna yang ingin dihapus:"
+    echo -e "${ORANGE}Masukkan email atau username pengguna yang ingin dihapus:${NC}"
     read -rp "Email/Username: " identifier
     if [[ -z "$identifier" ]]; then
-        echo "❌ Email atau username tidak boleh kosong."
+        echo -e "${RED}❌ Email atau username tidak boleh kosong.${NC}"
         exit 1
     fi
     mysql -u root -e "USE panel; DELETE FROM users WHERE email='$identifier' OR username='$identifier';" 2>/dev/null || {
-        echo "❌ Gagal menghapus pengguna. Pastikan MariaDB berjalan dan pengguna ada."
+        echo -e "${RED}❌ Gagal menghapus pengguna. Pastikan MariaDB berjalan dan pengguna ada.${NC}"
         exit 1
     }
-    echo "✅ Pengguna dengan email/username '$identifier' telah dihapus."
+    echo -e "${GREEN}✅ Pengguna dengan email/username '$identifier' telah dihapus.${NC}"
 }
 
 # Menu pilihan
-echo "=== Pterodactyl Panel Installer ==="
+echo -e "${ORANGE}=== Pterodactyl Panel Installer ===${NC}"
 echo "0) Batal / Cancel"
 echo "1) Uninstall bersih / Clean uninstall"
 echo "2) Install dengan reCAPTCHA"
@@ -292,7 +300,7 @@ echo "13) Uninstall lalu install tanpa reCAPTCHA"
 read -rp "Pilih opsi [0-6,12-13]: " choice
 
 case "$choice" in
-    0) echo "Dibatalkan."; exit 0 ;;
+    0) echo -e "${YELLOW}Dibatalkan.${NC}"; exit 0 ;;
     1) uninstall_ptero ;;
     2) install_ptero "yes" ;;
     3) install_ptero "no" ;;
@@ -301,5 +309,5 @@ case "$choice" in
     6) delete_user ;;
     12) uninstall_ptero && install_ptero "yes" ;;
     13) uninstall_ptero && install_ptero "no" ;;
-    *) echo "Pilihan tidak valid."; exit 1 ;;
+    *) echo -e "${RED}Pilihan tidak valid.${NC}"; exit 1 ;;
 esac
